@@ -217,7 +217,8 @@ export class Formsy extends React.Component<FormsyProps, FormsyState> {
     }
   };
 
-  public isValidValue = (component, value) => this.runValidation(component, value).isValid;
+  public isValidValue = (component, value) =>
+    this.runValidation(component, value).then((validation) => validation.isValid);
 
   // eslint-disable-next-line react/destructuring-assignment
   public isFormDisabled = () => this.props.disabled;
@@ -268,47 +269,56 @@ export class Formsy extends React.Component<FormsyProps, FormsyState> {
   public runValidation = <V>(
     component: InputComponent<V>,
     value = component.state.value,
-  ): { isRequired: boolean; isValid: boolean; validationError: ValidationError[] } => {
+  ): Promise<{ isRequired: boolean; isValid: boolean; validationError: ValidationError[] }> => {
     const { validationErrors } = this.props;
     const { validationError, validationErrors: componentValidationErrors, name } = component.props;
     const currentValues = this.getCurrentValues();
-    const validationResults = utils.runRules(value, currentValues, component.validations, validationRules);
-    const requiredResults = utils.runRules(value, currentValues, component.requiredValidations, validationRules);
-    const isRequired = Object.keys(component.requiredValidations).length ? !!requiredResults.success.length : false;
-    const isValid = !validationResults.failed.length && !(validationErrors && validationErrors[component.props.name]);
 
-    return {
-      isRequired,
-      isValid: isRequired ? false : isValid,
-      validationError: (() => {
-        if (isValid && !isRequired) {
-          return this.emptyArray;
-        }
+    return Promise.all([
+      utils.runRules(value, currentValues, component.validations, validationRules),
+      utils.runRules(value, currentValues, component.requiredValidations, validationRules),
+    ]).then(([validationResults, requiredResults]) => {
+      return Promise.resolve().then(() => {
+        const isRequired = Object.keys(component.requiredValidations).length ? !!requiredResults.success.length : false;
+        const isValid =
+          !validationResults.failed.length && !(validationErrors && validationErrors[component.props.name]);
 
-        if (validationResults.errors.length) {
-          return validationResults.errors;
-        }
+        return {
+          isRequired,
+          isValid: isRequired ? false : isValid,
+          validationError: (() => {
+            if (isValid && !isRequired) {
+              return this.emptyArray;
+            }
 
-        if (validationErrors && validationErrors[name]) {
-          return isString(validationErrors[name]) ? [validationErrors[name]] : validationErrors[name];
-        }
+            if (validationResults.errors.length) {
+              return validationResults.errors;
+            }
 
-        if (isRequired) {
-          const error = componentValidationErrors[requiredResults.success[0]] || validationError;
-          return error ? [error] : null;
-        }
+            if (validationErrors && validationErrors[name]) {
+              return isString(validationErrors[name]) ? [validationErrors[name]] : validationErrors[name];
+            }
 
-        if (validationResults.failed.length) {
-          return validationResults.failed
-            .map((failed) => (componentValidationErrors[failed] ? componentValidationErrors[failed] : validationError))
-            .filter((x, pos, arr) => arr.indexOf(x) === pos); // remove duplicates
-        }
+            if (isRequired) {
+              const error = componentValidationErrors[requiredResults.success[0]] || validationError;
+              return error ? [error] : null;
+            }
 
-        // This line is not reachable
-        // istanbul ignore next
-        return undefined;
-      })(),
-    };
+            if (validationResults.failed.length) {
+              return validationResults.failed
+                .map((failed) =>
+                  componentValidationErrors[failed] ? componentValidationErrors[failed] : validationError,
+                )
+                .filter((x, pos, arr) => arr.indexOf(x) === pos); // remove duplicates
+            }
+
+            // This line is not reachable
+            // istanbul ignore next
+            return undefined;
+          })(),
+        };
+      });
+    });
   };
 
   // Method put on each input component to register
@@ -418,10 +428,9 @@ export class Formsy extends React.Component<FormsyProps, FormsyState> {
       onChange(this.getModel(), this.isChanged());
     }
 
-    const validationState = this.runValidation<V>(component);
     // Run through the validations, split them up and call
     // the validator IF there is a value or it is required
-    component.setState(validationState, this.validateForm);
+    this.runValidation<V>(component).then((validationState) => component.setState(validationState, this.validateForm));
   };
 
   // Validate the form by going through all child input components
@@ -443,10 +452,11 @@ export class Formsy extends React.Component<FormsyProps, FormsyState> {
     // Run validation again in case affected by other inputs. The
     // last component validated will run the onValidationComplete callback
     this.inputs.forEach((component, index) => {
-      const validationState = this.runValidation(component);
-      const isFinalInput = index === this.inputs.length - 1;
-      const callback = isFinalInput ? onValidationComplete : null;
-      component.setState(validationState, callback);
+      this.runValidation(component).then((validationState) => {
+        const isFinalInput = index === this.inputs.length - 1;
+        const callback = isFinalInput ? onValidationComplete : null;
+        component.setState(validationState, callback);
+      });
     });
 
     // If there are no inputs, set state where form is ready to trigger
@@ -480,7 +490,6 @@ export class Formsy extends React.Component<FormsyProps, FormsyState> {
       ...nonFormsyProps
     } = this.props;
     const { contextValue } = this.state;
-
     return React.createElement(
       FormsyContext.Provider,
       {

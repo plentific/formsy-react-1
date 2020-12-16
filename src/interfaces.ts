@@ -12,7 +12,11 @@ export type IUpdateInputsWithError = (errors: { [key: string]: ValidationError }
 
 export type ValidationError = string | React.ReactNode;
 
-export type ValidationFunction<V> = (values: Values, value: V, extra?: any) => boolean | ValidationError;
+export type ValidationFunction<V> = (
+  values: Values,
+  value: V,
+  extra?: any,
+) => boolean | Promise<boolean> | ValidationError | Promise<ValidationError>;
 
 export type Validation<V> = string | boolean | ValidationFunction<V>;
 
@@ -38,9 +42,9 @@ export interface FormsyContextInterface {
   attachToForm: (component: InputComponent<any>) => void;
   detachFromForm: (component: InputComponent<any>) => void;
   isFormDisabled: boolean;
-  isValidValue: (component: InputComponent<any>, value: any) => boolean;
+  isValidValue: (component: InputComponent<any>, value: any) => Promise<boolean>;
   validate: (component: InputComponent<any>) => void;
   runValidation: (
     component: InputComponent<any>,
-  ) => { isRequired: boolean; isValid: boolean; validationError: ValidationError[] };
+  ) => Promise<{ isRequired: boolean; isValid: boolean; validationError: ValidationError[] }>;
 }
