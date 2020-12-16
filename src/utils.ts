@@ -111,36 +111,38 @@ export function runRules<V>(
     success: [],
   };
 
-  Object.keys(validations).forEach((validationName) => {
-    const validationsVal = validations[validationName];
-    const validationRulesVal = validationRules[validationName];
-    const addToResults = (validation) => {
-      if (isString(validation)) {
-        results.errors.push(validation);
-        results.failed.push(validationName);
-      } else if (!validation) {
-        results.failed.push(validationName);
-      } else {
-        results.success.push(validationName);
+  return Promise.all(
+    Object.keys(validations).map((validationName) => {
+      const validationsVal = validations[validationName];
+      const validationRulesVal = validationRules[validationName];
+      const addToResults = (validation) => {
+        if (isString(validation)) {
+          results.errors.push(validation);
+          results.failed.push(validationName);
+        } else if (!validation) {
+          results.failed.push(validationName);
+        } else {
+          results.success.push(validationName);
+        }
+      };
+
+      if (validationRulesVal && isFunction(validationsVal)) {
+        throw new Error(`Formsy does not allow you to override default validations: ${validationName}`);
       }
-    };
 
-    if (validationRulesVal && isFunction(validationsVal)) {
-      throw new Error(`Formsy does not allow you to override default validations: ${validationName}`);
-    }
+      if (!validationRulesVal && !isFunction(validationsVal)) {
+        throw new Error(`Formsy does not have the validation rule: ${validationName}`);
+      }
 
-    if (!validationRulesVal && !isFunction(validationsVal)) {
-      throw new Error(`Formsy does not have the validation rule: ${validationName}`);
-    }
+      if (isFunction(validationsVal)) {
+        return Promise.resolve(validationsVal(currentValues, value)).then((validation) => addToResults(validation));
+      }
 
-    if (isFunction(validationsVal)) {
-      return addToResults(validationsVal(currentValues, value));
-    }
-
-    return addToResults(validationRulesVal(currentValues, value, validationsVal));
-  });
-
-  return results;
+      return Promise.resolve(validationRulesVal(currentValues, value, validationsVal)).then((validation) =>
+        addToResults(validation),
+      );
+    }),
+  ).then(() => results);
 }
 
 export function throttle(callback, interval) {

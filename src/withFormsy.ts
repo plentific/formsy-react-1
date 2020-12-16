@@ -84,7 +84,7 @@ export interface InjectedProps<V> {
   isPristine: boolean;
   isRequired: boolean;
   isValid: boolean;
-  isValidValue: (value: V) => boolean;
+  isValidValue: (value: V) => Promise<boolean>;
   ref?: React.Ref<any>;
   resetValue: () => void;
   setValidations: (validations: Validations<V>, required: RequiredValidation<V>) => void;
@@ -100,7 +100,7 @@ export interface WrapperInstanceMethods<V> {
   isFormDisabled: () => boolean;
   isFormSubmitted: () => boolean;
   isValid: () => boolean;
-  isValidValue: (value: V) => boolean;
+  isValidValue: (value: V) => Promise<boolean>;
   setValue: (value: V, validate?: boolean) => void;
 }
 
@@ -145,7 +145,7 @@ export default function withFormsy<T, V>(
         isPristine: true,
         pristineValue: props.value,
         value: props.value,
-        ...runValidation(this, props.value),
+        ...runValidation(this, props.value).then((validation) => validation),
       };
     }
 
